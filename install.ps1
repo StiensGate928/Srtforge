@@ -68,6 +68,9 @@ function Get-PythonInfo {
         }
     } catch {
         return $null
+    }
+}
+
 if ($PythonPath) {
     $pythonCmd = @($PythonPath)
 } elseif ($PythonVersion) {
