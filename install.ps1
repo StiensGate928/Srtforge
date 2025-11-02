@@ -489,12 +489,12 @@ import sys
 try:
     importlib.import_module("nemo.collections.asr")
 except Exception as exc:
-    print(
+    message = (
         "ERROR: NVIDIA NeMo ASR components failed to import after installation. "
         "This usually means one of its dependencies (such as numpy, pyarrow or matplotlib) "
-        "was not installed correctly.",
-        file=sys.stderr,
+        "was not installed correctly."
     )
+    print(message, file=sys.stderr)
     print(f"       Original import error: {exc}", file=sys.stderr)
     sys.exit(1)
 else:
