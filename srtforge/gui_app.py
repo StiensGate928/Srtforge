@@ -1217,8 +1217,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._last_worker_options: Optional[WorkerOptions] = None
         self._runtime_config_path: Optional[str] = None
 
+        self._qsettings = QtCore.QSettings("srtforge", "SrtforgeStudio")
         # Theme state (persisted via QSettings)
-        self._dark_mode: bool = False
+        self._dark_mode: bool = self._qsettings.value("dark_mode", False, type=bool)
         # Single source of truth for user options (kept only in the Options dialog)
         self._basic_options = {
             "prefer_gpu": True,
@@ -1233,7 +1234,6 @@ class MainWindow(QtWidgets.QMainWindow):
         }
         self.ffmpeg_paths = locate_ffmpeg_binaries()
         self.mkv_paths = locate_mkvmerge_binary()
-        self._qsettings = QtCore.QSettings("srtforge", "SrtforgeStudio")
         self._eta_timer = QtCore.QTimer(self)
         self._eta_timer.setInterval(1000)
         self._eta_timer.timeout.connect(self._tick_eta)
@@ -1257,141 +1257,159 @@ class MainWindow(QtWidgets.QMainWindow):
         page = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(page)
         layout.setSpacing(16)
-        pointer_cursor = QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        # Header: title left, icons right
         header_row = QtWidgets.QHBoxLayout()
-        title = QtWidgets.QLabel("Srtforge Studio")
-        title.setObjectName("HeaderLabel")
-        header_row.addWidget(title)
+        self.header_label = QtWidgets.QLabel("Srtforge Studio")
+        self.header_label.setObjectName("HeaderLabel")
+        self.header_label.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft
+        )
+        header_row.addWidget(self.header_label)
+
         header_row.addStretch()
 
-        # Light/Dark mode toggle (solid button, no outline)
-        self.theme_toggle = QtWidgets.QToolButton()
-        self.theme_toggle.setObjectName("ThemeToggle")
-        self.theme_toggle.setText("Dark mode")
-        self.theme_toggle.setCheckable(True)
-        self.theme_toggle.setCursor(pointer_cursor)
-        self.theme_toggle.toggled.connect(self._on_theme_toggled)
-        header_row.addWidget(self.theme_toggle)
+        self.theme_button = QtWidgets.QToolButton()
+        self.theme_button.setObjectName("ThemeToggleButton")
+        self.theme_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.theme_button.setToolTip("Toggle dark mode")
+        self.theme_button.clicked.connect(self._toggle_dark_mode)
+        header_row.addWidget(self.theme_button)
 
-        self.options_button = QtWidgets.QPushButton("Options")
-        self.options_button.setCursor(pointer_cursor)
-        self.options_button.clicked.connect(self._open_options_dialog)
-        header_row.addWidget(self.options_button)
+        self.settings_button = QtWidgets.QToolButton()
+        self.settings_button.setObjectName("SettingsButton")
+        self.settings_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.settings_button.setToolTip("Options")
+        self.settings_button.clicked.connect(self._open_options_dialog)
+        header_row.addWidget(self.settings_button)
 
         layout.addLayout(header_row)
 
         # --- Queue card ------------------------------------------------------
-        queue_card = QtWidgets.QFrame()
-        queue_card.setObjectName("QueueCard")
-        queue_card.setFrameShape(QtWidgets.QFrame.NoFrame)
-        card_layout = QtWidgets.QVBoxLayout(queue_card)
-        card_layout.setContentsMargins(16, 16, 16, 16)
-        card_layout.setSpacing(12)
+        queue_group = QtWidgets.QGroupBox("Transcription queue")
+        queue_layout = QtWidgets.QVBoxLayout(queue_group)
+        queue_layout.setContentsMargins(12, 12, 12, 12)
 
-        # Top action bar: Add / Remove / Clear ...  Language: Auto-detect
-        action_bar = QtWidgets.QHBoxLayout()
-
+        # Top bar: Add / Remove / Clear
+        top_bar = QtWidgets.QHBoxLayout()
         self.add_button = QtWidgets.QPushButton("Add files…")
-        self.add_button.setCursor(pointer_cursor)
+        self.add_button.setObjectName("PrimaryButton")
+        self.add_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.add_button.clicked.connect(self._open_file_dialog)
-        action_bar.addWidget(self.add_button)
 
-        self.remove_button = QtWidgets.QPushButton("Remove selected")
-        self.remove_button.setCursor(pointer_cursor)
+        self.remove_button = QtWidgets.QPushButton("Remove")
+        self.remove_button.setObjectName("SecondaryButton")
+        self.remove_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.remove_button.clicked.connect(self._remove_selected_items)
-        action_bar.addWidget(self.remove_button)
 
-        self.clear_button = QtWidgets.QPushButton("Clear queue")
-        self.clear_button.setCursor(pointer_cursor)
-        self.clear_button.setFlat(True)  # text-only vibe, red hover via QSS
+        self.clear_button = QtWidgets.QPushButton("Clear")
+        self.clear_button.setObjectName("SecondaryButton")
+        self.clear_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.clear_button.clicked.connect(self._clear_queue)
-        action_bar.addWidget(self.clear_button)
 
-        action_bar.addStretch()
+        top_bar.addWidget(self.add_button)
+        top_bar.addWidget(self.remove_button)
+        top_bar.addWidget(self.clear_button)
+        top_bar.addStretch()
+        queue_layout.addLayout(top_bar)
 
-        language_label = QtWidgets.QLabel("Language")
-        self.language_combo = QtWidgets.QComboBox()
-        # Honest: Parakeet is English-only today
-        self.language_combo.addItem("Auto-detect (English only)")
-        self.language_combo.setEnabled(False)
-        self.language_combo.setToolTip("The bundled Parakeet model is English-only for now.")
-        action_bar.addWidget(language_label)
-        action_bar.addWidget(self.language_combo)
-
-        card_layout.addLayout(action_bar)
-
-        # Center: stacked empty state vs queue list
-        self.queue_stack = QtWidgets.QStackedWidget()
-
-        # Empty drag & drop state
-        self.queue_placeholder = QtWidgets.QWidget()
-        ph_layout = QtWidgets.QVBoxLayout(self.queue_placeholder)
-        ph_layout.addStretch()
-        icon_lbl = QtWidgets.QLabel("🎬")
-        icon_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        icon_lbl.setStyleSheet("font-size: 40px;")
-        ph_layout.addWidget(icon_lbl)
-        text_lbl = QtWidgets.QLabel("Drag & drop video files here\nor click “Add files…”")
-        text_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        text_lbl.setStyleSheet("color: #6b7280;")
-        ph_layout.addWidget(text_lbl)
-        ph_layout.addStretch()
-        self.queue_stack.addWidget(self.queue_placeholder)
-
-        # Actual queue list
+        # Center: stacked empty state vs queue list (details in step 3)
         self.queue_list = QtWidgets.QListWidget()
         self.queue_list.setObjectName("QueueList")
         self.queue_list.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.queue_list.setSelectionMode(
-            QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection
-        )
+        self.queue_list.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
         self.queue_list.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.queue_list.setUniformItemSizes(True)
         self.queue_list.setMinimumHeight(160)
-        self.queue_stack.addWidget(self.queue_list)
 
-        card_layout.addWidget(self.queue_stack)
+        self.empty_state = QtWidgets.QWidget()
+        self.empty_state.setObjectName("DropArea")
+        empty_layout = QtWidgets.QVBoxLayout(self.empty_state)
+        empty_layout.setContentsMargins(24, 32, 24, 32)
+        empty_layout.addStretch()
 
-        # Bottom bar: total duration (left) + Start / Stop (right)
-        bottom_bar = QtWidgets.QHBoxLayout()
-        self.queue_summary_label = QtWidgets.QLabel("No files in queue")
-        bottom_bar.addWidget(self.queue_summary_label)
-        bottom_bar.addStretch()
+        icon_label = QtWidgets.QLabel("🎬")
+        icon_font = icon_label.font()
+        icon_font.setPointSize(int(icon_font.pointSize() * 1.5) or 32)
+        icon_label.setFont(icon_font)
+        icon_label.setAlignment(QtCore.Qt.AlignCenter)
+        icon_label.setObjectName("DropIconLabel")
+        empty_layout.addWidget(icon_label)
 
-        self.start_button = QtWidgets.QPushButton("Start transcription")
-        self.start_button.setCursor(pointer_cursor)
-        self.start_button.clicked.connect(self._start_processing)
-        bottom_bar.addWidget(self.start_button)
+        hint_label = QtWidgets.QLabel("Drag & drop video files here")
+        hint_label.setAlignment(QtCore.Qt.AlignCenter)
+        hint_label.setObjectName("DropHintLabel")
+        empty_layout.addWidget(hint_label)
+        empty_layout.addStretch()
 
-        self.stop_button = QtWidgets.QPushButton("Stop")
-        self.stop_button.setCursor(pointer_cursor)
-        self.stop_button.setEnabled(False)
-        self.stop_button.clicked.connect(self._stop_processing)
-        bottom_bar.addWidget(self.stop_button)
+        self.queue_stack = QtWidgets.QStackedWidget()
+        self.queue_stack.addWidget(self.empty_state)   # index 0
+        self.queue_stack.addWidget(self.queue_list)    # index 1
+        queue_layout.addWidget(self.queue_stack)
 
-        card_layout.addLayout(bottom_bar)
+        layout.addWidget(queue_group)
+        add_shadow(queue_group)
 
-        layout.addWidget(queue_card)
-        add_shadow(queue_card)
-
-        # Log drawer (hidden by default – toggled from the status bar)
-        self.log_container = QtWidgets.QFrame()
-        self.log_container.setObjectName("LogContainer")
-        log_layout = QtWidgets.QVBoxLayout(self.log_container)
-        log_layout.setContentsMargins(0, 0, 0, 0)
-
+        # Log console
         self.log_view = QtWidgets.QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMinimumHeight(110)
         self.log_view.setMaximumHeight(260)
         self.log_view.setMaximumBlockCount(10000)
         self._init_log_zoom()
-        log_layout.addWidget(self.log_view)
+        self.log_view.setVisible(True)
+        layout.addWidget(self.log_view)
         add_shadow(self.log_view)
 
-        # Start hidden; user can reveal via the terminal icon in the status bar
-        self.log_container.setVisible(False)
-        layout.addWidget(self.log_container)
+        # Main Card – Bottom Bar
+        button_row = QtWidgets.QHBoxLayout()
+        self.eta_label = QtWidgets.QLabel("ETA —")
+        self.eta_label.setObjectName("EtaLabel")
+        button_row.addWidget(self.eta_label)
+
+        button_row.addStretch()
+
+        self.start_button = QtWidgets.QPushButton("Start transcription")
+        self.stop_button = QtWidgets.QPushButton("Stop")
+        self.stop_button.setEnabled(False)
+
+        pointer_cursor = QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        for button in (self.start_button, self.stop_button):
+            button.setCursor(pointer_cursor)
+            button_row.addWidget(button)
+
+        self.start_button.clicked.connect(self._start_processing)
+        self.stop_button.clicked.connect(self._stop_processing)
+
+        layout.addLayout(button_row)
+
+        # Optional progress bar below the controls
+        self.progress_bar = QtWidgets.QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+
+        # Footer row: system status + console toggle
+        footer_row = QtWidgets.QHBoxLayout()
+        self.status_label = QtWidgets.QLabel("🟢 System ready")
+        self.status_label.setObjectName("StatusLabel")
+        self.status_label.setWordWrap(False)
+        footer_row.addWidget(self.status_label)
+
+        footer_row.addStretch()
+
+        self.console_button = QtWidgets.QPushButton(">_ Console")
+        self.console_button.setObjectName("ConsoleButton")
+        self.console_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.console_button.setCheckable(True)
+        self.console_button.setChecked(True)
+        self.console_button.clicked.connect(self._toggle_console)
+        footer_row.addWidget(self.console_button)
+
+        layout.addLayout(footer_row)
 
         scroll = QtWidgets.QScrollArea()
         scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
@@ -1399,39 +1417,7 @@ class MainWindow(QtWidgets.QMainWindow):
         scroll.setWidget(page)
         self.setCentralWidget(scroll)
 
-        # --- Status bar: system status + ETA + log toggle --------------------
-        status_bar = QtWidgets.QStatusBar(self)
-        self.setStatusBar(status_bar)
-
-        # Tiny coloured dot + short text; full details in tooltip
-        self.status_indicator = QtWidgets.QLabel()
-        self.status_indicator.setObjectName("StatusIndicator")
-        status_bar.addWidget(self.status_indicator)
-
-        # We’ll move ETA text down here
-        self.eta_label = QtWidgets.QLabel("Idle")
-        self.eta_label.setObjectName("EtaLabel")
-        status_bar.addWidget(self.eta_label)
-
-        # Sleek progress bar, only visible while processing
-        self.progress_bar = QtWidgets.QProgressBar()
-        self.progress_bar.setMaximumWidth(180)
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setVisible(False)
-        status_bar.addPermanentWidget(self.progress_bar)
-
-        # “Terminal” toggle for the log drawer
-        self.log_toggle_button = QtWidgets.QToolButton()
-        self.log_toggle_button.setCheckable(True)
-        self.log_toggle_button.setToolTip("Show logs")
-        self.log_toggle_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
-        # There’s no built-in terminal icon, but this is close enough.
-        self.log_toggle_button.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_ComputerIcon))
-        self.log_toggle_button.toggled.connect(self._toggle_log_panel)
-        status_bar.addPermanentWidget(self.log_toggle_button)
-
+        self.queue_list.itemSelectionChanged.connect(self._update_start_state)
         self._update_start_state()
 
     # Make the whole window a drop target with a gentle grey overlay
@@ -1502,13 +1488,6 @@ class MainWindow(QtWidgets.QMainWindow):
         font.setPointSize(size)
         self.log_view.setFont(font)
 
-    def _toggle_log_panel(self, checked: bool) -> None:
-        if getattr(self, "log_container", None) is None:
-            return
-        self.log_container.setVisible(checked)
-        if hasattr(self, "log_toggle_button"):
-            self.log_toggle_button.setToolTip("Hide logs" if checked else "Show logs")
-
     def _zoom_in(self) -> None:
         self._log_zoom_delta += 1
         self._apply_log_font()
@@ -1520,235 +1499,159 @@ class MainWindow(QtWidgets.QMainWindow):
     def _zoom_reset(self) -> None:
         self._log_zoom_delta = 0
         self._apply_log_font()
+
     def _apply_styles(self) -> None:
-        # Accent color is still taken from Windows; fall back to Tailwind-ish blue
-        accent = get_windows_accent_qcolor() or QtGui.QColor("#3B82F6")
+        accent = get_windows_accent_qcolor() or QtGui.QColor("#2563eb")
+        dark = getattr(self, "_dark_mode", False)
+
         palette = self.palette()
-
-        if self._dark_mode:
-            # ---- Dark (Slate) palette ----
-            # App background      #0F172A
-            # Card / queue bg     #1E293B-ish (we use cards via QSS)
-            # Primary text        #F1F5F9
-            # Secondary text      #94A3B8
-            palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#0F172A"))
+        if dark:
+            # dark palette...
+            palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#020617"))
             palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#020617"))
-            palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor("#020617"))
-            palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#E5E7EB"))
-            palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor("#F1F5F9"))
-            palette.setColor(QtGui.QPalette.ColorRole.Button, accent)
-            palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtGui.QColor("#F9FAFB"))
-            palette.setColor(QtGui.QPalette.ColorRole.Highlight, accent)
-            palette.setColor(QtGui.QPalette.ColorRole.ToolTipBase, QtGui.QColor("#020617"))
-            palette.setColor(QtGui.QPalette.ColorRole.ToolTipText, QtGui.QColor("#E5E7EB"))
+            palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#e5e7eb"))
+            palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor("#e5e7eb"))
         else:
-            # ---- Light palette ----
-            # App background      #F8FAFC
-            # Card / queue bg     #FFFFFF
-            # Primary text        #0F172A
-            # Secondary text      #64748B
-            palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#F8FAFC"))
-            palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#FFFFFF"))
-            palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor("#F1F5F9"))
-            palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#0F172A"))
-            palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor("#0F172A"))
-            palette.setColor(QtGui.QPalette.ColorRole.Button, accent)
-            palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtGui.QColor("#FFFFFF"))
-            palette.setColor(QtGui.QPalette.ColorRole.Highlight, accent)
-            palette.setColor(QtGui.QPalette.ColorRole.ToolTipBase, QtGui.QColor("#E5E7EB"))
-            palette.setColor(QtGui.QPalette.ColorRole.ToolTipText, QtGui.QColor("#020617"))
+            # light palette
+            palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#f5f6f8"))
+            palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#ffffff"))
+            palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#111827"))
+            palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor("#111827"))
 
+        palette.setColor(QtGui.QPalette.ColorRole.Highlight, accent)
+        palette.setColor(QtGui.QPalette.ColorRole.Button, accent)
+        palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtGui.QColor("#ffffff"))
         self.setPalette(palette)
 
-        # Only use the Win11 .qss file as a base for light mode; in dark mode we fully override.
-        base_qss = ""
-        if not self._dark_mode:
-            base_qss = self._load_win11_stylesheet(accent) or ""
+        stylesheet = self._load_win11_stylesheet(accent) or ""
 
-        lighter = QtGui.QColor(accent)
-        lighter = lighter.lighter(115)
-        darker = QtGui.QColor(accent)
-        darker = darker.darker(115)
-
-        if self._dark_mode:
-            # --- Dark mode QSS: no bright borders, rely on elevation + slate cards ---
-            custom = f"""
-            #MainWindow {{
-                background-color: #0F172A;
-            }}
-
-            QLabel {{
-                color: #E5E7EB;
-            }}
-            QLabel#HeaderLabel {{
-                color: #F9FAFB;
-                font-size: 20px;
-                font-weight: 600;
-            }}
-            QLabel#EtaLabel {{
-                color: #94A3B8;
-                padding: 6px 10px;
-            }}
-
-            #QueueCard {{
-                background-color: #020617;
-                border-radius: 16px;
-                border: none;
-            }}
-
-            QPlainTextEdit, QTextEdit {{
-                background-color: #020617;
-                color: #E5E7EB;
-                border-radius: 12px;
-                border: 1px solid #020617; /* effectively borderless, keeps card shape */
-            }}
-
-            QGroupBox {{
-                background-color: #020617;
-                border-radius: 16px;
-                border: none;              /* no wireframe box */
-                margin-top: 16px;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                left: 16px;
-                padding: 4px 8px 4px 8px;
-                color: #E5E7EB;
-                font-weight: 500;
-            }}
-
-            QListWidget#QueueList {{
-                background-color: #020617;
-                border-radius: 10px;
-                border: none;              /* remove blue outline */
-            }}
-            QListWidget#QueueList::item {{
-                padding: 6px 8px;
-            }}
-            QListWidget#QueueList::item:hover {{
-                background-color: rgba(148, 163, 184, 0.18);
-            }}
-            QListWidget#QueueList::item:selected {{
-                background-color: rgba(59, 130, 246, 0.35);
-                color: #E5E7EB;
-            }}
-
-            QPushButton, QToolButton {{
-                background-color: {accent.name()};
-                color: #F9FAFB;
-                border-radius: 8px;
-                padding: 6px 14px;
-                border: none;              /* solid fill, no ghost buttons */
-            }}
-            QPushButton:disabled, QToolButton:disabled {{
-                background-color: #1E293B;
-                color: #64748B;
-            }}
-            QPushButton:hover, QToolButton:hover {{
-                background-color: {lighter.name()};
-            }}
-            QPushButton:pressed, QToolButton:pressed {{
-                background-color: {darker.name()};
-            }}
-
-            QLineEdit, QComboBox {{
-                background-color: #020617;
-                border-radius: 8px;
-                border: 1px solid #1E293B;
-                padding: 4px 8px;
-                color: #E5E7EB;
-                selection-background-color: {accent.name()};
-            }}
-
-            QScrollArea {{
-                background-color: #0F172A;
-                border: none;
-            }}
-
-            #GlobalDropOverlay {{
-                background: rgba(15, 23, 42, 0.80);
-            }}
-            """
+        if dark:
+            extra = f"""
+        QToolButton#ThemeToggleButton,
+        QToolButton#SettingsButton {{
+            background: transparent;
+            border-radius: 16px;
+            padding: 6px;
+        }}
+        QToolButton#ThemeToggleButton:hover,
+        QToolButton#SettingsButton:hover {{
+            background: rgba(148,163,184,0.18);
+        }}
+        QPushButton#PrimaryButton {{
+            background-color: {accent.name()};
+            color: #f9fafb;
+            border-radius: 8px;
+            padding: 7px 16px;
+            border: none;
+        }}
+        QPushButton#PrimaryButton:disabled {{
+            background-color: #1f2937;
+            color: #6b7280;
+        }}
+        QPushButton#SecondaryButton {{
+            background: transparent;
+            border-radius: 8px;
+            padding: 7px 16px;
+            border: 1px solid #4b5563;
+            color: #9ca3af;
+        }}
+        QPushButton#SecondaryButton:hover {{
+            border-color: #ef4444;
+            color: #ef4444;
+            background: rgba(248,113,113,0.08);
+        }}
+        #DropArea {{
+            background: #020617;
+            border-radius: 12px;
+            border: 1px dashed rgba(148,163,184,0.4);
+        }}
+        #DropHintLabel {{
+            color: rgba(148,163,184,0.9);
+        }}
+        #DropIconLabel {{
+            color: rgba(148,163,184,0.5);
+        }}
+        QLabel#StatusLabel {{
+            color: #9ca3af;
+        }}
+        """
         else:
-            # --- Light mode QSS: subtle borders, same accent, solid buttons ---
-            custom = f"""
-            QLabel,QLineEdit,QComboBox,QPushButton,QCheckBox {{
-                padding-top: 4px;
-                padding-bottom: 4px;
-            }}
+            extra = f"""
+        QToolButton#ThemeToggleButton,
+        QToolButton#SettingsButton {{
+            background: transparent;
+            border-radius: 16px;
+            padding: 6px;
+        }}
+        QToolButton#ThemeToggleButton:hover,
+        QToolButton#SettingsButton:hover {{
+            background: rgba(15,23,42,0.06);
+        }}
+        QPushButton#PrimaryButton {{
+            background-color: {accent.name()};
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 7px 16px;
+            border: none;
+        }}
+        QPushButton#PrimaryButton:disabled {{
+            background-color: #9ca3ff;
+            color: rgba(255,255,255,0.7);
+        }}
+        QPushButton#SecondaryButton {{
+            background: transparent;
+            border-radius: 8px;
+            padding: 7px 16px;
+            border: 1px solid #cbd5e1;
+            color: #64748b;
+        }}
+        QPushButton#SecondaryButton:hover {{
+            border-color: #ef4444;
+            color: #ef4444;
+            background: #fef2f2;
+        }}
+        #DropArea {{
+            background: #ffffff;
+            border-radius: 12px;
+            border: 1px dashed rgba(148,163,184,0.6);
+        }}
+        #DropHintLabel {{
+            color: #6b7280;
+        }}
+        #DropIconLabel {{
+            color: rgba(148,163,184,0.5);
+        }}
+        QLabel#StatusLabel {{
+            color: #6b7280;
+        }}
+        """
 
-            QGroupBox {{
-                margin-top: 12px;
-                background: #FFFFFF;
-                border-radius: 16px;
-                border: 1px solid #E2E8F0;
-            }}
-            QGroupBox::title {{
-                subcontrol-origin: margin;
-                left: 16px;
-                padding: 4px 8px 4px 8px;
-            }}
+        # Existing common rules from your original _apply_styles:
+        extra += """
+    QLabel,QLineEdit,QComboBox,QPushButton,QCheckBox {
+        padding-top: 4px; padding-bottom: 4px;
+    }
+    QGroupBox { margin-top: 12px; }
+    QGroupBox::title {
+        subcontrol-origin: margin; left: 12px;
+        padding: 4px 8px 4px 8px;
+    }
+    #QueueList {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+    }
+    #QueueList::item { padding: 6px 8px; }
+    #QueueList::item:hover { background: rgba(0,0,0,0.04); }
+    #QueueList::item:selected {
+        background: rgba(37,99,235,0.16);
+        color: #111827;
+    }
+    #EtaLabel { padding: 6px 10px; }
+    """
 
-            #QueueCard {{
-                background: #FFFFFF;
-                border-radius: 16px;
-                border: 1px solid #E2E8F0;
-            }}
-
-            #QueueList {{
-                background: #FFFFFF;
-                border: 1px solid #E2E8F0;
-                border-radius: 10px;
-            }}
-            #QueueList::item {{ padding: 6px 8px; }}
-            #QueueList::item:hover {{ background: rgba(0,0,0,0.03); }}
-            #QueueList::item:selected {{
-                background: rgba(59,130,246,0.14);
-                color: #111827;
-            }}
-
-            #EtaLabel {{
-                color: #64748B;
-                padding: 6px 10px;
-            }}
-
-            QPushButton, QToolButton {{
-                background-color: {accent.name()};
-                color: #FFFFFF;
-                border-radius: 8px;
-                padding: 6px 14px;
-                border: none;
-            }}
-            QPushButton:disabled, QToolButton:disabled {{
-                background-color: #E5E7EB;
-                color: #9CA3AF;
-            }}
-            QPushButton:hover, QToolButton:hover {{
-                background-color: {lighter.name()};
-            }}
-            QPushButton:pressed, QToolButton:pressed {{
-                background-color: {darker.name()};
-            }}
-
-            QPlainTextEdit {{
-                background-color: #FFFFFF;
-                border-radius: 10px;
-                border: 1px solid #E5E7EB;
-            }}
-            """
-
-        self.setStyleSheet(base_qss + custom)
-
-    def _update_theme_toggle_label(self) -> None:
-        """Update the toggle button text to reflect the current mode."""
-        if hasattr(self, "theme_toggle"):
-            self.theme_toggle.setText("Light mode" if self._dark_mode else "Dark mode")
-
-    def _on_theme_toggled(self, checked: bool) -> None:
-        """Switch between light and dark palettes."""
-        self._dark_mode = bool(checked)
-        self._update_theme_toggle_label()
-        self._apply_styles()
+        self.setStyleSheet((stylesheet or "") + extra)
+        self._sync_theme_button_icon()
 
     def _load_win11_stylesheet(self, accent: QtGui.QColor) -> Optional[str]:
         try:
@@ -1761,6 +1664,25 @@ class MainWindow(QtWidgets.QMainWindow):
             data.replace("{ACCENT_COLOR}", accent.name())
             .replace("{ACCENT_COLOR_LIGHT}", lighter.name())
         )
+
+    def _toggle_dark_mode(self) -> None:
+        self._dark_mode = not getattr(self, "_dark_mode", False)
+        self._qsettings.setValue("dark_mode", self._dark_mode)
+        self._qsettings.sync()
+        self._apply_styles()
+
+    def _sync_theme_button_icon(self) -> None:
+        # Called from _apply_styles
+        if not hasattr(self, "theme_button"):
+            return
+        if getattr(self, "_dark_mode", False):
+            self.theme_button.setText("☀️")
+            self.theme_button.setToolTip("Switch to light mode")
+        else:
+            self.theme_button.setText("🌙")
+            self.theme_button.setToolTip("Switch to dark mode")
+        if hasattr(self, "settings_button"):
+            self.settings_button.setText("⚙️")
 
     # ---- persistent options ------------------------------------------------------
     def _load_persistent_options(self) -> None:
@@ -1776,16 +1698,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._basic_options["srt_language"] = s.value("srt_language", "eng", type=str)
         self._basic_options["srt_default"] = s.value("srt_default", False, type=bool)
         self._basic_options["srt_forced"] = s.value("srt_forced", False, type=bool)
-
-        # Theme
-        self._dark_mode = s.value("dark_mode", False, type=bool)
-        if hasattr(self, "theme_toggle"):
-            block = self.theme_toggle.blockSignals(True)
-            try:
-                self.theme_toggle.setChecked(self._dark_mode)
-            finally:
-                self.theme_toggle.blockSignals(block)
-        self._update_theme_toggle_label()
 
     def _save_persistent_options(self) -> None:
         """Persist current GUI options for the next run."""
@@ -1807,30 +1719,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ---- runtime helpers ---------------------------------------------------------
     def _update_tool_status(self) -> None:
-        lines: list[str] = []
+        parts: list[str] = ["🟢 System ready"]
         if self.ffmpeg_paths:
-            lines.append(f"FFmpeg detected at {self.ffmpeg_paths.ffmpeg.parent}")
+            parts.append(f"FFmpeg at {self.ffmpeg_paths.ffmpeg.parent}")
         else:
-            lines.append("FFmpeg not found. Burning and FFmpeg-based embedding will be unavailable.")
+            parts.append("FFmpeg not found")
         if self.mkv_paths:
-            lines.append(f"MKVToolNix (mkvmerge) detected at {self.mkv_paths.mkvmerge.parent}")
+            parts.append(f"MKVToolNix at {self.mkv_paths.mkvmerge.parent}")
         else:
-            lines.append("MKVToolNix (mkvmerge) not found. Set SRTFORGE_MKV_DIR or install MKVToolNix for soft embedding.")
-        detail = "\n".join(lines)
+            parts.append("MKVToolNix not found")
+        if hasattr(self, "status_label"):
+            self.status_label.setText(" · ".join(parts))
 
-        if not hasattr(self, "status_indicator"):
-            return
-
-        # Tiny coloured bullet + short text; hover shows full details
-        all_ok = bool(self.ffmpeg_paths)
-        color = "#10b981" if all_ok else "#f97316"
-        text = "System ready" if all_ok else "Limited: FFmpeg missing"
-
-        self.status_indicator.setText(
-            f'<span style="color:{color};">●</span> {text}'
-        )
-        self.status_indicator.setTextFormat(QtCore.Qt.TextFormat.RichText)
-        self.status_indicator.setToolTip(detail)
+    def _toggle_console(self, checked: bool) -> None:
+        # Show/hide the log console; label is explicit, not “mystery meat”
+        self.log_view.setVisible(checked)
 
     def _handle_dropped_files(self, files: list) -> None:
         self._add_files_to_queue(files)
@@ -1878,47 +1781,31 @@ class MainWindow(QtWidgets.QMainWindow):
         self._queue_duration_cache.clear()
         self._update_start_state()
 
+    def _update_queue_empty_state(self) -> None:
+        if not hasattr(self, "queue_stack"):
+            return
+        if self.queue_list.count():
+            self.queue_stack.setCurrentWidget(self.queue_list)
+        else:
+            self.queue_stack.setCurrentWidget(self.empty_state)
+
     def _update_start_state(self) -> None:
         has_items = self.queue_list.count() > 0
-        self.start_button.setEnabled(has_items and not self._worker)
+        has_selection = bool(self.queue_list.selectedItems())
+        worker_running = self._worker is not None
 
-        # Switch between empty placeholder and actual list
-        if hasattr(self, "queue_stack"):
-            self.queue_stack.setCurrentWidget(
-                self.queue_list if has_items else self.queue_placeholder
-            )
+        self.start_button.setEnabled(has_items and not worker_running)
+        self.stop_button.setEnabled(worker_running)
+        self.queue_list.setEnabled(not worker_running)
 
-        self._update_queue_summary()
+        # Ghost actions only when they make sense
+        self.remove_button.setEnabled(has_selection and not worker_running)
+        self.clear_button.setEnabled(has_items and not worker_running)
 
-    def _update_queue_summary(self) -> None:
-        if not hasattr(self, "queue_summary_label"):
-            return
+        if hasattr(self, "settings_button"):
+            self.settings_button.setEnabled(not worker_running)
 
-        count = self.queue_list.count()
-        if count == 0:
-            self.queue_summary_label.setText("No files in queue")
-            return
-
-        total_s = 0.0
-        for i in range(count):
-            path = self.queue_list.item(i).data(QtCore.Qt.ItemDataRole.UserRole)
-            if not path:
-                continue
-            total_s += float(self._queue_duration_cache.get(str(path), 0.0))
-
-        if total_s <= 0:
-            summary = f"{count} file{'s' if count != 1 else ''} in queue"
-        else:
-            total_seconds = int(round(total_s))
-            minutes, secs = divmod(total_seconds, 60)
-            hours, minutes = divmod(minutes, 60)
-            if hours:
-                dur_str = f"{hours:d}:{minutes:02d}:{secs:02d}"
-            else:
-                dur_str = f"{minutes:02d}:{secs:02d}"
-            summary = f"{count} file{'s' if count != 1 else ''} – Total duration: {dur_str}"
-
-        self.queue_summary_label.setText(summary)
+        self._update_queue_empty_state()
 
     def _set_queue_item_status(self, media: str, status: str) -> None:
         path = Path(media)
@@ -1977,10 +1864,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._worker.request_stop()
 
     def _set_running_state(self, running: bool) -> None:
-        self.start_button.setEnabled(not running)
-        self.stop_button.setEnabled(running)
-        self.queue_list.setEnabled(not running)
-        self.options_button.setEnabled(not running)
+        # running is kept for compatibility; real state is self._worker is not None
+        self._update_start_state()
 
     def _append_log(self, message: str) -> None:
         self.log_view.appendPlainText(message)
@@ -2027,7 +1912,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._log_tailer.stop()
         self._worker = None
         self._set_running_state(False)
-        self._update_start_state()
         if (
             self._last_worker_options
             and self._last_worker_options.cleanup_gpu
@@ -2086,7 +1970,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._eta_deadline = None
         self._eta_total = 0.0
         if hasattr(self, "eta_label"):
-            self.eta_label.setText("Idle")
+            self.eta_label.setText("ETA —")
         if hasattr(self, "progress_bar"):
             self.progress_bar.setVisible(False)
             self.progress_bar.setValue(0)
@@ -2096,7 +1980,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _tick_eta(self) -> None:
         if self._eta_deadline is None or self._eta_total <= 0:
             if hasattr(self, "eta_label"):
-                self.eta_label.setText("Idle")
+                self.eta_label.setText("ETA —")
             if hasattr(self, "progress_bar"):
                 self.progress_bar.setVisible(False)
             return
