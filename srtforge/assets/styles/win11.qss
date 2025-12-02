@@ -7,7 +7,7 @@ QWidget {
 
 #HeaderLabel {
     font-size: 22px;
-    font-weight: 600;
+    font-weight: 500;
     padding: 12px 0;
 }
 
