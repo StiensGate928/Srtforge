@@ -15,6 +15,7 @@ license = {text = "MIT"}
 srtforge = "srtforge.cli:app"
 srtforge-sonarr = "srtforge.sonarr_hook:main"
 srtforge-gui = "srtforge.gui_app:main"
+srtforge-subscription = "srtforge.subscription_app:app"
 
 [tool.setuptools.packages.find]
 where = ["."]

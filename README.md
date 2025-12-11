@@ -143,6 +143,23 @@ srtforge series "/shows/My Anime/Season 1" --glob "**/*.mkv"
 Sonarr integration is available through `srtforge sonarr-hook`, which reads the
 standard Sonarr environment variables and invokes the same pipeline.
 
+## Monthly subscription CLI
+
+A lightweight Typer app is included for experimenting with monthly subscription
+management. Use the dedicated entry point to create plans, customers, and
+subscriptions backed by a JSON file of your choosing (defaulting to
+`~/.srtforge_subscriptions.json`):
+
+```bash
+srtforge-subscription create-plan basic "Basic plan" 9.99
+srtforge-subscription create-customer cust-1 "Ada Lovelace" ada@example.com
+srtforge-subscription subscribe sub-1 cust-1 basic --start 2024-05-01
+srtforge-subscription bill --on 2024-06-02
+```
+
+`bill` will emit invoices for every active subscription due on or before the
+provided date and advance their next billing date by the plan interval.
+
 ## Windows 11 desktop GUI
 
 The repository now ships with a PySide6-powered Windows 11-style front-end
