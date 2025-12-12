@@ -2196,7 +2196,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QProgressBar#QueueProgressBar {{
                 border-radius: 999px;
                 background-color: rgba(15, 23, 42, 0.9);
-                border: 1px solid rgba(148, 163, 184, 0.6);
+                border: none;  /* no outer box */
                 height: 10px;
                 padding: 0px;
                 text-align: center;
@@ -2741,7 +2741,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QProgressBar#QueueProgressBar {{
                 border-radius: 999px;
                 background-color: #E5E7EB;
-                border: 1px solid #CBD5E1;
+                border: none;  /* no white outline */
                 height: 10px;
                 padding: 0px;
                 text-align: center;
@@ -3292,12 +3292,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # Match size to the footer progress bar so they look identical.
         if hasattr(self, "progress_bar") and self.progress_bar is not None:
             footer = self.progress_bar
-            # Thickness
+            # Thickness matches the footer bar.
             h = footer.sizeHint().height()
             if h > 0 and bar.height() != h:
                 bar.setFixedHeight(h)
-            # Length (use actual width if laid out, otherwise min/sizeHint)
-            footer_width = footer.width() or footer.minimumWidth() or footer.sizeHint().width()
+
+            # Width: use the same canonical width as the footer (its minimum).
+            footer_width = footer.minimumWidth() or QUEUE_PROGRESS_WIDTH
             if footer_width > 0 and bar.width() != footer_width:
                 bar.setFixedWidth(footer_width)
 
@@ -3312,6 +3313,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if container is None or container is not existing_container:
             container = QtWidgets.QWidget()
+            # Make sure there is no extra "white box" around the bar.
+            container.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            container.setStyleSheet("background: transparent; border: none;")
+
             layout = QtWidgets.QHBoxLayout(container)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)
