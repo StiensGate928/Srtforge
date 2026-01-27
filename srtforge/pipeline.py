@@ -229,6 +229,7 @@ class Pipeline:
                         )
 
                         output_path.parent.mkdir(parents=True, exist_ok=True)
+                        word_timestamps_path = output_path.with_suffix(".words.json").resolve()
                         device, compute_type = get_whisper_device_config(
                             prefer_gpu=self.config.prefer_gpu,
                         )
@@ -240,6 +241,7 @@ class Pipeline:
                             model_name=self.config.whisper_model,
                             language=self.config.whisper_language,
                             prefer_gpu=self.config.prefer_gpu,
+                            word_timestamps_out=str(word_timestamps_path),
                         )
                         run_logger.log(f"Whisper segments: {len(events)}")
 

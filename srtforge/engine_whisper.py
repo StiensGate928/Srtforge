@@ -11,6 +11,7 @@ IMPORTANT: Do NOT import torch/faster_whisper/google.genai at module import time
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -382,6 +383,7 @@ def generate_optimized_events(
     pause_ms: int = 400,
     max_chars: int = 84,
     max_dur_s: float = 7.0,
+    word_timestamps_out: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     1) Transcribe with Faster-Whisper (word timestamps)
@@ -400,13 +402,20 @@ def generate_optimized_events(
         vad_filter=False,
     )
 
+    raw_words: List[Dict[str, Any]] = []
     all_words: List[Dict[str, Any]] = []
     for s in segments:
         # faster_whisper returns s.words with .word/.start/.end
         for w in getattr(s, "words", []) or []:
-            t = (getattr(w, "word", "") or "").strip()
+            raw_word = getattr(w, "word", "") or ""
+            raw_words.append({"word": raw_word, "start": float(w.start), "end": float(w.end)})
+            t = raw_word.strip()
             if t:
                 all_words.append({"word": t, "start": float(w.start), "end": float(w.end)})
+
+    if word_timestamps_out:
+        with open(word_timestamps_out, "w", encoding="utf-8") as fp:
+            json.dump(raw_words, fp, ensure_ascii=False, indent=2)
 
     events = segment_smart_stream(all_words, pause_ms=pause_ms, max_chars=max_chars, max_dur_s=max_dur_s)
     events = apply_global_start_offset(events, offset_ms=50)
